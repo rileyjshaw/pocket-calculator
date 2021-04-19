@@ -9,20 +9,22 @@ const LOCAL_URL = `http://localhost:${PORT}`;
 const REDIRECT_PATH = '/results';
 const REDIRECT_URI = `${LOCAL_URL}${REDIRECT_PATH}`;
 
-const P_STYLE = 'style="line-height:1.4;margin:1.5em 0"';
-
 const app = express();
 const pocket = new Pocket(process.env.POCKET_CONSUMER_KEY, REDIRECT_URI);
 
+const STYLE =
+	'<style>body{max-width:700px;margin:3em auto;font:24px charter,georgia,serif}h1{margin-bottom:0;text-decoration:underline}p{line-height:1.4;margin:1.5em 0}li{margin-block-end:1em}hr{margin-block:1.5em}</style>';
+
 app.get('/', function (req, res) {
 	res.send(`<html>
-    <head>
-        <title>Pocket calculator</title>
-    </head>
-    <body style="max-width:700px;margin:3em auto;font:24px charter,georgia,serif">
-        <h1 style="margin-bottom:0;text-decoration:underline">Pocket calculator</h1>
-        <p ${P_STYLE}>To view your Pocket stats, you must first <a href="/auth">authorize this application</a>.</p>
-    </body>
+	<head>
+		<title>Pocket calculator</title>
+		${STYLE}
+	</head>
+	<body>
+		<h1>Pocket calculator</h1>
+		<p>To view your Pocket stats, you must first <a href="/auth">authorize this application</a>.</p>
+	</body>
 </html>`);
 });
 app.get('/auth', function (req, res) {
@@ -49,11 +51,19 @@ app.get(REDIRECT_PATH, function (req, res) {
 				const bookCount = (wordCount / 90000).toFixed(1);
 				return { count: list.length, wordCount, pageCount, bookCount };
 			});
-			const unreadArticlesSorted = articlesByState[0]
-				.filter(({ word_count, is_article }) => +word_count && is_article === '1')
-				.sort((a, b) => a.word_count - b.word_count);
-			const shortestUnreadArticle = unreadArticlesSorted[0];
-			const longestUnreadArticle = unreadArticlesSorted[unreadArticlesSorted.length - 1];
+			const [unreadNonArticlesSorted, unreadArticlesSorted] = articlesByState[0]
+				.sort((a, b) => b.word_count - a.word_count)
+				.reduce(
+					(acc, current) => {
+						const isArticle = +(+current.word_count && current.is_article === '1');
+						acc[isArticle].push(current);
+						return acc;
+					},
+					[[], []]
+				);
+
+			const shortestUnreadArticle = unreadArticlesSorted[unreadArticlesSorted.length - 1];
+			const longestUnreadArticle = unreadArticlesSorted[0];
 
 			const firstDay =
 				1000 * articles.reduce((lowest, cur) => Math.min(lowest, parseInt(cur.time_added)), Infinity);
@@ -87,40 +97,73 @@ app.get(REDIRECT_PATH, function (req, res) {
 			res.send(`<html>
 	<head>
 		<title>Pocket calculator</title>
+		${STYLE}
 	</head>
-	<body style="max-width:700px;margin:3em auto;font:24px charter,georgia,serif">
-		<h1 style="margin-bottom:0;text-decoration:underline">Pocket calculator</h1>
+	<body>
+		<h1>Pocket calculator</h1>
 		<h2 style="margin-top:0;font-size:0.8em">${
 			accessToken.username
 		}&nbsp;&nbsp;•&nbsp;&nbsp;<span style="font-weight: normal">${
 				new Date().toISOString().split('T')[0]
 			}</span></h2>
-		<p ${P_STYLE}>You have <strong>${unreadStats.count} unread articles,</strong> with a total word count of <strong>${
+		<p>You have <strong>${unreadStats.count} unread articles,</strong> with a total word count of <strong>${
 				unreadStats.wordCount
 			}</strong>. That’s about <strong>${unreadStats.pageCount} pages,</strong> or <strong>${
 				unreadStats.bookCount
 			} books.</strong></p>
-		<p ${P_STYLE}>You have <strong>${readStats.count} read articles,</strong> with a total word count of <strong>${
+		<p>You have <strong>${readStats.count} read articles,</strong> with a total word count of <strong>${
 				readStats.wordCount
 			}</strong>. That’s about <strong>${readStats.pageCount} pages,</strong> or <strong>${
 				readStats.bookCount
 			} books.</strong></p>
-		<p ${P_STYLE}>You’ve been using Pocket since <strong>${readableFirstDay},</strong> which means you read an average of <strong>${(
+		<p>You’ve been using Pocket since <strong>${readableFirstDay},</strong> which means you read an average of <strong>${(
 				readStats.bookCount / yearsActive
 			).toFixed(1)} books</strong> worth of content per year.</p>
 		<div id="graphs"></div>
 		${
-			longestUnreadArticle
+			unreadArticlesSorted.length > 1 && longestUnreadArticle
 				? `<p>Your longest unread article is <a href="${longestUnreadArticle.resolved_url}">${
 						longestUnreadArticle.resolved_title || longestUnreadArticle.resolved_url
 				  }</a>, at ${longestUnreadArticle.word_count} words.</p>`
 				: ''
 		}
 		${
-			shortestUnreadArticle
+			unreadArticlesSorted.length > 1 && shortestUnreadArticle
 				? `<p>Your shortest unread article is <a href="${shortestUnreadArticle.resolved_url}">${
 						shortestUnreadArticle.resolved_title || shortestUnreadArticle.resolved_url
 				  }</a>, at ${shortestUnreadArticle.word_count} words.</p>`
+				: ''
+		}
+		${
+			unreadArticlesSorted.length
+				? `<hr/><h2>Unread articles, sorted by word count</h2><ul>
+			${unreadArticlesSorted
+				.map(
+					article =>
+						`<li><a href="${article.resolved_url}">${
+							article.resolved_title || article.resolved_url
+						}</a>, at <strong>${article.word_count}</strong> word${
+							article.word_count === '1' ? '' : 's'
+						}.</li>`
+				)
+				.join('')}
+		</ul>`
+				: ''
+		}
+		${
+			unreadNonArticlesSorted.length
+				? `<hr/><h2>Articles that Pocket couldn’t parse</h2><ul>
+			${unreadNonArticlesSorted
+				.map(
+					article =>
+						`<li><a href="${article.resolved_url}">${
+							article.resolved_title || article.resolved_url
+						}</a>, at <strong>${article.word_count}</strong> word${
+							article.word_count === '1' ? '' : 's'
+						}.</li>`
+				)
+				.join('')}
+		</ul>`
 				: ''
 		}
 		<script>
