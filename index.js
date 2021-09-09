@@ -37,7 +37,15 @@ app.get('/auth', function (req, res) {
 app.get(REDIRECT_PATH, function (req, res) {
 	pocket.getAccessToken().then(accessToken => {
 		pocket.getArticles({ state: 'all' }).then(response => {
-			const articles = Object.values(response.list);
+			const articles = Object.values(response.list).map(article => {
+				const wordCount = parseInt(article.word_count || 0);
+				return {
+					...article,
+					resolvedUrl: article.resolved_url ?? article.given_url,
+					isArticle: article.is_article === '1' && !!wordCount,
+					wordCount,
+				};
+			});
 			const articlesByState = articles.reduce(
 				(acc, article) => {
 					acc[article.status].push(article);
@@ -46,17 +54,17 @@ app.get(REDIRECT_PATH, function (req, res) {
 				[[], []]
 			);
 			const [unreadStats, readStats] = articlesByState.map(list => {
-				const wordCount = list.reduce((acc, article) => acc + parseInt(article.word_count), 0);
+				const wordCount = list.reduce((acc, article) => acc + article.wordCount, 0);
 				const pageCount = Math.round(wordCount / 275);
 				const bookCount = (wordCount / 90000).toFixed(1);
 				return { count: list.length, wordCount, pageCount, bookCount };
 			});
 			const [unreadNonArticlesSorted, unreadArticlesSorted] = articlesByState[0]
-				.sort((a, b) => b.word_count - a.word_count)
+				.sort((a, b) => b.wordCount - a.wordCount)
 				.reduce(
 					(acc, current) => {
-						const isArticle = +(+current.word_count && current.is_article === '1');
-						acc[isArticle].push(current);
+						const accIdx = +current.isArticle;
+						acc[accIdx].push(current);
 						return acc;
 					},
 					[[], []]
@@ -83,7 +91,7 @@ app.get(REDIRECT_PATH, function (req, res) {
 				const untilIdx = Math.ceil(
 					((parseInt(article.time_read) * 1000 || Date.now()) - firstDay) / 1000 / 60 / 60 / 24
 				);
-				const wordCount = parseInt(article.word_count);
+				const {wordCount} = article;
 				for (let i = fromIdx; i <= untilIdx; ++i) {
 					unreadArticleCountByDay[i]++;
 					unreadWordCountByDay[i] += wordCount;
@@ -122,16 +130,16 @@ app.get(REDIRECT_PATH, function (req, res) {
 		<div id="graphs"></div>
 		${
 			unreadArticlesSorted.length > 1 && longestUnreadArticle
-				? `<p>Your longest unread article is <a href="${longestUnreadArticle.resolved_url}">${
-						longestUnreadArticle.resolved_title || longestUnreadArticle.resolved_url
-				  }</a>, at ${longestUnreadArticle.word_count} words.</p>`
+				? `<p>Your longest unread article is <a href="${longestUnreadArticle.resolvedUrl}">${
+						longestUnreadArticle.resolved_title || longestUnreadArticle.resolvedUrl
+				  }</a>, at ${longestUnreadArticle.wordCount} words.</p>`
 				: ''
 		}
 		${
 			unreadArticlesSorted.length > 1 && shortestUnreadArticle
-				? `<p>Your shortest unread article is <a href="${shortestUnreadArticle.resolved_url}">${
-						shortestUnreadArticle.resolved_title || shortestUnreadArticle.resolved_url
-				  }</a>, at ${shortestUnreadArticle.word_count} words.</p>`
+				? `<p>Your shortest unread article is <a href="${shortestUnreadArticle.resolvedUrl}">${
+						shortestUnreadArticle.resolved_title || shortestUnreadArticle.resolvedUrl
+				  }</a>, at ${shortestUnreadArticle.wordCount} words.</p>`
 				: ''
 		}
 		${
@@ -140,10 +148,10 @@ app.get(REDIRECT_PATH, function (req, res) {
 			${unreadArticlesSorted
 				.map(
 					article =>
-						`<li><a href="${article.resolved_url}">${
-							article.resolved_title || article.resolved_url
-						}</a>, at <strong>${article.word_count}</strong> word${
-							article.word_count === '1' ? '' : 's'
+						`<li><a href="${article.resolvedUrl}">${
+							article.resolved_title || article.resolvedUrl
+						}</a>, at <strong>${article.wordCount}</strong> word${
+							article.wordCount === 1 ? '' : 's'
 						}.</li>`
 				)
 				.join('')}
@@ -156,10 +164,10 @@ app.get(REDIRECT_PATH, function (req, res) {
 			${unreadNonArticlesSorted
 				.map(
 					article =>
-						`<li><a href="${article.resolved_url}">${
-							article.resolved_title || article.resolved_url
-						}</a>, at <strong>${article.word_count}</strong> word${
-							article.word_count === '1' ? '' : 's'
+						`<li><a href="${article.resolvedUrl}">${
+							article.resolved_title || article.resolvedUrl
+						}</a>, at <strong>${article.wordCount}</strong> word${
+							article.wordCount === 1 ? '' : 's'
 						}.</li>`
 				)
 				.join('')}
