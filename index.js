@@ -1,8 +1,10 @@
 'use strict';
 
-require('dotenv').config();
-const express = require('express');
-const Pocket = require('./pocket-api');
+import express from 'express';
+import { config } from 'dotenv';
+import PocketAPI from 'pocket-api';
+
+config();
 
 const PORT = 8451;
 const LOCAL_URL = `http://localhost:${PORT}`;
@@ -10,7 +12,7 @@ const REDIRECT_PATH = '/results';
 const REDIRECT_URI = `${LOCAL_URL}${REDIRECT_PATH}`;
 
 const app = express();
-const pocket = new Pocket(process.env.POCKET_CONSUMER_KEY, REDIRECT_URI);
+const pocket = new PocketAPI(process.env.POCKET_CONSUMER_KEY, REDIRECT_URI);
 
 const STYLE =
 	'<style>body{max-width:700px;margin:3em auto;font:24px charter,georgia,serif}h1{margin-bottom:0;text-decoration:underline}p{line-height:1.4;margin:1.5em 0}li{margin-block-end:1em}hr{margin-block:1.5em}</style>';
@@ -29,9 +31,7 @@ app.get('/', function (req, res) {
 });
 app.get('/auth', function (req, res) {
 	pocket.getRequestToken().then(requestToken => {
-		res.redirect(
-			`https://getpocket.com/auth/authorize?request_token=${requestToken.code}&redirect_uri=${REDIRECT_URI}`
-		);
+		res.redirect(`https://getpocket.com/auth/authorize?request_token=${requestToken}&redirect_uri=${REDIRECT_URI}`);
 	});
 });
 app.get(REDIRECT_PATH, function (req, res) {
@@ -91,7 +91,7 @@ app.get(REDIRECT_PATH, function (req, res) {
 				const untilIdx = Math.ceil(
 					((parseInt(article.time_read) * 1000 || Date.now()) - firstDay) / 1000 / 60 / 60 / 24
 				);
-				const {wordCount} = article;
+				const { wordCount } = article;
 				for (let i = fromIdx; i <= untilIdx; ++i) {
 					unreadArticleCountByDay[i]++;
 					unreadWordCountByDay[i] += wordCount;
@@ -150,9 +150,7 @@ app.get(REDIRECT_PATH, function (req, res) {
 					article =>
 						`<li><a href="${article.resolvedUrl}">${
 							article.resolved_title || article.resolvedUrl
-						}</a>, at <strong>${article.wordCount}</strong> word${
-							article.wordCount === 1 ? '' : 's'
-						}.</li>`
+						}</a>, at <strong>${article.wordCount}</strong> word${article.wordCount === 1 ? '' : 's'}.</li>`
 				)
 				.join('')}
 		</ul>`
@@ -166,9 +164,7 @@ app.get(REDIRECT_PATH, function (req, res) {
 					article =>
 						`<li><a href="${article.resolvedUrl}">${
 							article.resolved_title || article.resolvedUrl
-						}</a>, at <strong>${article.wordCount}</strong> word${
-							article.wordCount === 1 ? '' : 's'
-						}.</li>`
+						}</a>, at <strong>${article.wordCount}</strong> word${article.wordCount === 1 ? '' : 's'}.</li>`
 				)
 				.join('')}
 		</ul>`
